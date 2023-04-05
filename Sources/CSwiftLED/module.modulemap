@@ -1,0 +1,5 @@
+module CSwiftLED [system] {
+    header "/usr/local/include/LEDMatrix/led-matrix-c.h"
+    link "rgbmatrix"
+    export *
+}
