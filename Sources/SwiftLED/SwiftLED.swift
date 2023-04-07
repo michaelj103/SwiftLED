@@ -64,18 +64,31 @@ public class LEDMatrix {
         }
     }
     
+    private var canvasCache: [OpaquePointer:LEDCanvas] = [:]
+    private func _canvasForPtr(_ canvasPtr: OpaquePointer) -> LEDCanvas {
+        let outCanvas: LEDCanvas
+        if let cachedCanvas = canvasCache[canvasPtr] {
+            outCanvas = cachedCanvas
+        } else {
+            outCanvas = LEDCanvas(canvasPtr: canvasPtr)
+            canvasCache[canvasPtr] = outCanvas
+        }
+        
+        return outCanvas
+    }
+    
     public func getCanvas() -> LEDCanvas? {
         guard let matrixPtr, let canvasPtr = led_matrix_get_canvas(matrixPtr) else {
             return nil
         }
-        return LEDCanvas(canvasPtr: canvasPtr)
+        return _canvasForPtr(canvasPtr)
     }
     
     public func createOffscreenCanvas() -> LEDCanvas? {
         guard let matrixPtr, let canvasPtr = led_matrix_create_offscreen_canvas(matrixPtr) else {
             return nil
         }
-        return LEDCanvas(canvasPtr: canvasPtr)
+        return _canvasForPtr(canvasPtr)
     }
     
     @discardableResult
@@ -83,12 +96,15 @@ public class LEDMatrix {
         guard let matrixPtr, let canvasPtr = led_matrix_swap_on_vsync(matrixPtr, canvas.canvasPtr) else {
             return nil
         }
-        return LEDCanvas(canvasPtr: canvasPtr)
+        return _canvasForPtr(canvasPtr)
     }
     
     deinit {
         if let matrixPtr {
             led_matrix_delete(matrixPtr)
+        }
+        for (_, canvas) in canvasCache {
+            canvas.canvasDestroyed()
         }
         matrixPtr = nil
     }
@@ -98,6 +114,7 @@ public class LEDCanvas {
     // note: canvas pointers are owned by a matrix so we are not responsible for freeing them
     internal let canvasPtr: OpaquePointer
     public let size: Size
+    private var isDead = false
     
     init(canvasPtr: OpaquePointer) {
         self.canvasPtr = canvasPtr
@@ -109,15 +126,23 @@ public class LEDCanvas {
     }
     
     public func clear() {
+        precondition(!isDead, "clear() operation on a dead canvas")
         led_canvas_clear(canvasPtr)
     }
     
     public func fill(with color: Color) {
+        precondition(!isDead, "fill() operation on a dead canvas")
         led_canvas_fill(canvasPtr, color.r, color.g, color.b)
     }
     
     public func setPixel(_ pixel: Pixel, color: Color) {
+        precondition(!isDead, "setPixel() operation on a dead canvas")
         led_canvas_set_pixel(canvasPtr, pixel.x, pixel.y, color.r, color.g, color.b)
+    }
+    
+    /// Called when the matrix owning this canvas is destroyed. Indicates that operations on this canvas are no longer valid
+    internal func canvasDestroyed() {
+        isDead = true
     }
 }
 
